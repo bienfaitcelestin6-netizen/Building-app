@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="rw"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#14532d">
+<title>Oberlo Investment</title>
+<style>
+:root{--bg:#f2f5f3;--c:#fff;--t:#14201a;--m:#5f6e66;--p:#14532d;--b:#dbe3de;--bad:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1411;--c:#161e19;--t:#eef3ef;--m:#9aa9a0;--b:#26332b;--p:#3fa66a}}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--t);padding-bottom:72px}
+header{background:var(--p);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+.card{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:14px;margin:12px}
+input,select,button{width:100%;padding:12px;margin:5px 0;border-radius:8px;border:1px solid var(--b);font-size:16px;background:var(--c);color:var(--t)}
+button{background:var(--p);color:#fff;border:0;font-weight:600}
+button.no{background:var(--bad)}button.s{width:auto;padding:8px 14px;margin:0 0 0 6px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--c);border-top:1px solid var(--b)}
+nav button{background:none;color:var(--m);border-radius:0;margin:0;font-size:13px;padding:14px 4px}
+nav button.on{color:var(--p);box-shadow:inset 0 3px var(--p)}
+.row{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--b)}
+.m{color:var(--m);font-size:14px}.low{color:var(--bad);font-weight:700}h3{margin:0 0 6px}
+</style></head><body><div id="app"></div>
+<script>
+let T = localStorage.getItem('t'), U, tab, INV = [];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+const fm = n => Number(n).toLocaleString() + ' FRW';
+const uniq = rows => [...new Map(rows.map(r => [r.id, r])).values()];
+const opts = ps => ps.map(p => `<option value="${p.id}">${esc(p.name)} (${fm(p.unit_price)})</option>`).join('');
+const WH = '<select id="w"><option value="A">Ububiko A</option><option value="B">Ububiko B</option></select>';
+
+async function api(p, m = 'GET', b) {
+  const r = await fetch('/api' + p, { method: m, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + T }, body: b ? JSON.stringify(b) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && T) out();
+  if (!r.ok) throw new Error(d.error || 'Ikosa');
+  return d;
+}
+const act = async f => { try { alert((await f()) || 'Byakozwe'); go(tab); } catch (e) { alert(e.message); } };
+const out = () => { localStorage.removeItem('t'); T = U = null; start(); };
+
+function loginView(setup) {
+  $('#app').innerHTML = `<div class="card"><h3>Oberlo Investment LTD</h3>
+    ${setup ? '<input id="n" placeholder="Amazina yawe">' : ''}
+    <input id="e" type="email" placeholder="Email"><input id="p" type="password" placeholder="Password">
+    <button onclick="${setup ? 'doSetup()' : 'doLogin()'}">${setup ? 'Kora konti ya CEO' : 'Injira'}</button>
+    <p class="m" onclick="loginView(${!setup})">${setup ? 'Garuka' : 'Ni ubwa mbere? Kora konti ya CEO'}</p></div>`;
+}
+async function doLogin() {
+  try { T = (await api('/login', 'POST', { email: $('#e').value, password: $('#p').value })).token; localStorage.setItem('t', T); start(); }
+  catch (e) { alert(e.message); }
+}
+async function doSetup() {
+  try { await api('/setup', 'POST', { name: $('#n').value, email: $('#e').value, password: $('#p').value }); await doLogin(); }
+  catch (e) { alert(e.message); }
+}
+
+const tabs = () => [['home', 'Raporo', 1], ['inv', 'Ububiko'], ['sale', 'Kugurisha'], ['wd', 'Amafaranga'], ['ceo', 'CEO', 2]]
+  .filter(t => !t[2] || (t[2] === 1 ? U.role !== 'STAFF' : U.role === 'CEO'));
+
+async function start() {
+  if (!T) return loginView();
+  try { U = await api('/me'); } catch { return loginView(); }
+  $('#app').innerHTML = `<header><b>${esc(U.name)} (${U.role})</b><span onclick="out()">Sohoka</span></header><div id="v"></div>
+    <nav>${tabs().map(t => `<button id="t_${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join('')}</nav>`;
+  go(tabs()[0][0]);
+}
+async function go(t) {
+  tab = t;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.id === 't_' + t));
+  try { await V[t](); } catch (e) { $('#v').innerHTML = `<div class="card low">${esc(e.message)}</div>`; }
+}
+
+const V = {
+  async home() {
+    const r = await api('/sales/report');
+    $('#v').innerHTML = `<div class="card"><h3>Uyu munsi</h3><div class="row"><span>Ibyagurishijwe</span><b>${r.today_count}</b></div>
+      <div class="row"><span>Amafaranga</span><b>${fm(r.today_total)}</b></div></div>
+      <div class="card"><h3>Byose hamwe</h3><div class="row"><span>Ibyagurishijwe</span><b>${r.all_count}</b></div>
+      <div class="row"><span>Amafaranga</span><b>${fm(r.all_total)}</b></div></div>`;
+  },
+  async inv() {
+    INV = await api('/inventory'); const ps = uniq(INV);
+    let h = `<div class="card">${ps.map(p => `<b>${esc(p.name)}</b> <span class="m">${fm(p.unit_price)}</span>` +
+      INV.filter(r => r.id === p.id).map(r => `<div class="row"><span>Ububiko ${r.warehouse}</span><span class="${r.qty < 20 ? 'low' : ''}">${r.qty}</span></div>`).join('')).join('<br>')}</div>
+      <p class="m" style="margin:0 14px">Umutuku = munsi ya 20.</p>`;
+    if (U.role !== 'STAFF') h += `<div class="card"><h3>Ongera stock</h3><select id="pi">${opts(ps)}</select>${WH}
+      <input id="q" type="number" placeholder="Ingano"><button onclick="addStock()">Emeza</button></div>
+      <div class="card"><h3>Shyiraho igiciro</h3><select id="pi2">${opts(ps)}</select>
+      <input id="pr" type="number" placeholder="Igiciro (FRW)"><button onclick="setPrice()">Bika igiciro</button></div>`;
+    $('#v').innerHTML = h;
+  },
+  async sale() {
+    INV = await api('/inventory');
+    $('#v').innerHTML = `<div class="card"><h3>Kugurisha</h3><select id="pi">${opts(uniq(INV))}</select>${WH}
+      <input id="q" type="number" placeholder="Ingano"><button onclick="sell()">Andika igurisha</button></div>`;
+  },
+  async wd() {
+    U = await api('/me'); const mine = await api('/withdrawals/mine');
+    $('#v').innerHTML = `<div class="card"><h3>Balance: ${fm(U.balance)}</h3>
+      <input id="a" type="number" placeholder="Amafaranga ushaka"><input id="b" placeholder="Banki cyangwa MoMo">
+      <input id="c" placeholder="Nimero ya konti / telefoni"><button onclick="reqWd()">Saba gukuramo</button></div>
+      <div class="card"><h3>Ubusabe bwawe</h3>${mine.map(w => `<div class="row"><span>${fm(w.amount)}</span><span class="m">${w.status}</span></div>`).join('') || '<span class="m">Nta busabe.</span>'}</div>`;
+  },
+  async ceo() {
+    const [pend, users] = await Promise.all([api('/withdrawals/pending'), api('/users')]);
+    $('#v').innerHTML = `<div class="card"><h3>Ubusabe bategereje</h3>${pend.map(w => `<div class="row"><span>${esc(w.name)}<br><b>${fm(w.amount)}</b>
+      <span class="m">${esc(w.bank_name)} ${esc(w.account_no)}</span></span><span><button class="s" onclick="decide(${w.id},'APPROVED')">Emeza</button>
+      <button class="s no" onclick="decide(${w.id},'REJECTED')">Anga</button></span></div>`).join('') || '<span class="m">Nta busabe buhari.</span>'}</div>
+      <div class="card"><h3>Ongera amafaranga ku mukozi</h3><select id="du">${users.map(u => `<option value="${u.id}">${esc(u.name)} (${fm(u.balance)})</option>`).join('')}</select>
+      <input id="da" type="number" placeholder="Amafaranga"><button onclick="dep()">Yongere</button></div>
+      <div class="card"><h3>Umukozi mushya</h3><input id="un" placeholder="Amazina"><input id="ue" type="email" placeholder="Email">
+      <input id="up" type="password" placeholder="Password (inyuguti 8+)"><select id="ur"><option value="STAFF">STAFF</option><option value="ADMIN">ADMIN</option></select>
+      <button onclick="mkUser()">Yandike</button></div>`;
+  }
+};
+
+const addStock = () => act(async () => { await api('/inventory/add', 'POST', { productId: +$('#pi').value, warehouse: $('#w').value, qty: +$('#q').value }); });
+const setPrice = () => act(async () => { await api('/products/' + $('#pi2').value, 'PATCH', { unitPrice: +$('#pr').value }); });
+const sell = () => act(async () => { const d = await api('/sales', 'POST', { productId: +$('#pi').value, warehouse: $('#w').value, qty: +$('#q').value }); return 'Byanditswe. Total: ' + fm(d.total); });
+const reqWd = () => act(async () => { await api('/withdrawals', 'POST', { amount: +$('#a').value, bankName: $('#b').value, accountNo: $('#c').value }); return 'Ubusabe bwoherejwe'; });
+const decide = (id, s) => act(async () => { await api('/withdrawals/' + id, 'PATCH', { status: s }); return s === 'APPROVED' ? 'Cyemejwe' : 'Cyanzwe'; });
+const mkUser = () => act(async () => { await api('/users', 'POST', { name: $('#un').value, email: $('#ue').value, password: $('#up').value, role: $('#ur').value }); return 'Umukozi yongewe'; });
+const dep = () => act(async () => { await api('/deposit', 'POST', { userId: +$('#du').value, amount: +$('#da').value }); return 'Amafaranga yongewe'; });
+
+start();
+</script></body></html>
